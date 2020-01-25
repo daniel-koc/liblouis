@@ -195,3 +195,8 @@
 # /windows/include/
 /windows/include/Makefile.in
 /windows/include/Makefile
+
+/tests/tables/resolve_table/Makefile.in
+/tests/tables/resolve_table/dir_1/Makefile.in
+/tests/tables/resolve_table/dir_1/dir_1.1/Makefile.in
+/tests/tables/resolve_table/dir_2/Makefile.in
