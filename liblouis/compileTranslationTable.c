@@ -204,7 +204,7 @@ lou_logPrint (char *format, ...)
 void EXPORT_CALL
 lou_logEnd ()
 {
-  if (logFile != NULL)
+  if (logFile != NULL && logFile != stderr)
     fclose (logFile);
   logFile = NULL;
 }
@@ -2336,7 +2336,7 @@ passGetScriptToken ()
 	  passLinepos++;
 	  return pass_comma;
 	case '&':
-	  if (passLine.chars[passLinepos = 1] == '&')
+	  if (passLine.chars[passLinepos + 1] == '&')
 	    {
 	      passLinepos += 2;
 	      return pass_and;
