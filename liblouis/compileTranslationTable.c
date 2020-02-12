@@ -2289,7 +2289,7 @@ passGetScriptToken ()
 	  passLinepos++;
 	  return pass_comma;
 	case '&':
-	  if (passLine.chars[passLinepos = 1] == '&')
+	  if (passLine.chars[passLinepos + 1] == '&')
 	    {
 	      passLinepos += 2;
 	      return pass_and;
