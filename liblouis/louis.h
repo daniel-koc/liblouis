@@ -43,6 +43,8 @@ extern "C"
 #define strcasecmp _stricmp
 #endif
 
+//#define TESTING_TABLES
+
 #define NUMSWAPS 50
 #define NUMVAR 50
 #define LETSIGNSIZE 128
@@ -138,6 +140,7 @@ extern "C"
     pass_leftParen = '(',
     pass_rightParen = ')',
     pass_comma = ',',
+    pass_hypothesis = ':',
     pass_lteq = 130,
     pass_gteq = 131,
     pass_invalidToken = 132,
