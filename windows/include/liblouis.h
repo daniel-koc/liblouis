@@ -84,6 +84,17 @@ int EXPORT_CALL lou_charSize (void);
 		     formtype *typeform, char *spacing, int *outputPos, 
 		     int 
 *inputPos, int *cursorPos, int mode);
+
+  int EXPORT_CALL lou_translatePrehyphenated (const char *tableList,
+					      const widechar * inbuf,
+					      int *inlen, widechar * outbuf,
+					      int *outlen, formtype 
+					      *typeform,
+					      char *spacing, int *outputPos,
+					      int *inputPos, int *cursorPos,
+					      char *inputHyphens,
+					      char *outputHyphens, int mode);
+
 int EXPORT_CALL lou_hyphenate (const char *tableList, const widechar
 	       *inbuf,
       int inlen, char *hyphens, int mode);
@@ -127,6 +138,9 @@ formtype *typeform, char *spacing, int
 * lou_backTranslateString and also by functions in liblouisxml
 */
 
+void EXPORT_CALL lou_registerTableResolver (char ** (* resolver) (const char *table, const char *base));
+/* Register a new table resolver. Overrides the default resolver. */
+
 int EXPORT_CALL lou_compileString (const char *tableList, const char 
     *inString);
   char * EXPORT_CALL lou_setDataPath (char *path);
@@ -149,6 +163,7 @@ typedef void (*logcallback)(int level, const char *message);
     LOG_OFF = 2147483647
   } logLevels;
   void EXPORT_CALL lou_setLogLevel(logLevels level);
+/* Set the level for logging callback to be called at */
 
   void EXPORT_CALL lou_log(logLevels level, const char *format, ...);
 /* General log function for callback logging */

@@ -37,7 +37,7 @@ testPrint (const char *format, ...)
 void
 closeTestFile ()
 {
-  if (testFile != NULL)
+  if (testFile != NULL && testFile != stderr)
     fclose (testFile);
   testFile = NULL;
 }
