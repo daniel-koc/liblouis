@@ -601,7 +601,7 @@ getALine (FileInfo * nested)
     }
   nested->line[nested->linelen] = 0;
   nested->linepos = 0;
-  if (ch == EOF)
+  if (nested->linelen == 0 && ch == EOF)
     return 0;
   nested->lineNumber++;
   return 1;
@@ -1121,7 +1121,7 @@ add_1_single (FileInfo * nested)
       (newRule->opcode >= CTO_Context
        &&
        newRule->opcode <= CTO_Pass4)
-      || newRule->opcode == CTO_Repeated || (newRule->opcode == CTO_Always
+      || newRule->opcode == CTO_Replace || newRule->opcode == CTO_Repeated || (newRule->opcode == CTO_Always
 					     && newRule->charslen == 1))
     return;			/*too ambiguous */
   dots = definedCharOrDots (nested, newRule->charsdots[newRule->charslen], 1);
@@ -1155,7 +1155,7 @@ add_1_multiple ()
 								[newRule->
 								 charslen])];
   if (newRule->opcode == CTO_NoBreak || newRule->opcode == CTO_SwapCc ||
-      (newRule->opcode >= CTO_Context && newRule->opcode <= CTO_Pass4))
+      (newRule->opcode >= CTO_Context && newRule->opcode <= CTO_Pass4) || newRule->opcode == CTO_Replace)
     return;
   while (*currentOffsetPtr)
     {
@@ -1538,7 +1538,8 @@ parseChars (FileInfo * nested, CharsString * result, CharsString * token)
 	  result->chars[out++] = (widechar) ch;
 	  if (out >= MAXSTRING)
 	    {
-	      result->length = out;
+	      result->chars[out-1] = 0;
+	      result->length = out-1;
 	      return 1;
 	    }
 	  continue;
@@ -1567,10 +1568,14 @@ parseChars (FileInfo * nested, CharsString * result, CharsString * token)
       result->chars[out++] = (widechar) utf32;
       if (out >= MAXSTRING)
 	{
+	  result->chars[lastOutSize] = 0;
 	  result->length = lastOutSize;
 	  return 1;
 	}
     }
+  if (out >= MAXSTRING)
+    out--;
+  result->chars[out] = 0;
   result->length = out;
   return 1;
 }
@@ -1702,6 +1707,7 @@ parseDots (FileInfo * nested, CharsString * cells, const CharsString * token)
       return 0;
     }
   cells->chars[cellCount++] = cell | B16;	/*last cell */
+  cells->chars[cellCount] = 0;
   cells->length = cellCount;
   return 1;
 }
@@ -1883,6 +1889,7 @@ compileSwapDots (FileInfo * nested, CharsString * source, CharsString * dest)
 	}
       k++;
     }
+  dest->chars[dest->length] = 0;
   return 1;
 }
 
@@ -1959,7 +1966,7 @@ passGetAttributes ()
 {
   int more = 1;
   passAttributes = 0;
-  while (more)
+  while (passLinepos < passLine.length && more)
     {
       switch (passLine.chars[passLinepos])
 	{
@@ -2025,9 +2032,8 @@ static int
 passGetEmphasis ()
 {
   int more = 1;
-  passLinepos++;
   passEmphasis = 0;
-  while (more)
+  while (passLinepos < passLine.length && more)
     {
       switch (passLine.chars[passLinepos])
 	{
@@ -2088,7 +2094,7 @@ passGetString ()
   passHoldString.length = 0;
   while (1)
     {
-      if (!passLine.chars[passLinepos])
+      if (!passLine.chars[passLinepos] || passLinepos >= passLine.length)
 	{
 	  compileError (passNested, "unterminated string");
 	  return 0;
@@ -2112,7 +2118,7 @@ passGetNumber ()
 {
   /*Convert a string of wide character digits to an integer */
   passHoldNumber = 0;
-  while (passLine.chars[passLinepos] >= '0'
+  while (passLinepos < passLine.length && passLine.chars[passLinepos] >= '0'
 	 && passLine.chars[passLinepos] <= '9')
     passHoldNumber =
       10 * passHoldNumber + (passLine.chars[passLinepos++] - '0');
@@ -2124,7 +2130,7 @@ passGetName ()
 {
   TranslationTableCharacterAttributes attr;
   passHoldString.length = 0;
-  do
+  while (passLinepos < passLine.length)
     {
       attr = definedCharOrDots (passNested, passLine.chars[passLinepos],
 				0)->attributes;
@@ -2142,7 +2148,7 @@ passGetName ()
 	passLine.chars[passLinepos];
       passLinepos++;
     }
-  while (passLinepos < passLine.length);
+  passHoldString.chars[passHoldString.length] = 0;
   return 1;
 }
 
@@ -2289,7 +2295,7 @@ passGetScriptToken ()
 	  passLinepos++;
 	  return pass_comma;
 	case '&':
-	  if (passLine.chars[passLinepos = 1] == '&')
+	  if (passLine.chars[passLinepos + 1] == '&')
 	    {
 	      passLinepos += 2;
 	      return pass_and;
@@ -2339,6 +2345,11 @@ passGetScriptToken ()
 	case 'g':
 	  if (passIsKeyword ("roup"))
 	    return pass_group;
+	  passGetName ();
+	  return pass_nameFound;
+	case 'h':
+	  if (passIsKeyword ("ypothesis"))
+	    return pass_hypothesis;
 	  passGetName ();
 	  return pass_nameFound;
 	case 'i':
@@ -2709,20 +2720,15 @@ compilePassOpcode (FileInfo * nested, TranslationTableOpcode opcode)
 		return 0;
 	      if (!passGetName ())
 		return 0;
-	      if (!passIsRightParen ())
-		return 0;
 	      if (!(class = findCharacterClass (&passHoldString)))
 		return 0;
 	      passAttributes = class->attribute;
 	      passInsertAttributes ();
 	      break;
 	    case pass_swap:
-	      ruleOffset = findRuleName (&passHoldString);
 	      if (!passIsLeftParen ())
 		return 0;
 	      if (!passGetName ())
-		return 0;
-	      if (!passIsRightParen ())
 		return 0;
 	      ruleOffset = findRuleName (&passHoldString);
 	      if (ruleOffset)
@@ -2759,6 +2765,9 @@ compilePassOpcode (FileInfo * nested, TranslationTableOpcode opcode)
 	      if (!passIsNumber ())
 		return 0;
 	      passInstructions[passIC++] = passHoldNumber;
+	      break;
+	    case pass_hypothesis:
+	      passInstructions[passIC++] = pass_hypothesis;
 	      break;
 	    case pass_then:
 	      passInstructions[passIC++] = pass_endTest;
@@ -2828,8 +2837,6 @@ compilePassOpcode (FileInfo * nested, TranslationTableOpcode opcode)
 		return 0;
 	      if (!passGetName ())
 		return 0;
-	      if (!passIsRightParen ())
-		return 0;
 	      ruleOffset = findRuleName (&passHoldString);
 	      if (ruleOffset)
 		rule = (TranslationTableRule *) & table->ruleArea[ruleOffset];
@@ -2849,6 +2856,9 @@ compilePassOpcode (FileInfo * nested, TranslationTableOpcode opcode)
 			    showString (&passHoldString.chars[0],
 					passHoldString.length));
 	      return 0;
+	    case pass_hypothesis:
+	      passInstructions[passIC++] = pass_hypothesis;
+	      break;
 	    case pass_noMoreTokens:
 	      more = 0;
 	      break;
@@ -3044,6 +3054,9 @@ compilePassOpcode (FileInfo * nested, TranslationTableOpcode opcode)
 			    showString (&passHoldString.chars[0],
 					passHoldString.length));
 	      return 0;
+	    case pass_hypothesis:
+	      passInstructions[passIC++] = pass_hypothesis;
+	      break;
 	    case pass_endTest:
 	      passInstructions[passIC++] = pass_endTest;
 	      passLinepos++;
@@ -3110,6 +3123,7 @@ compilePassOpcode (FileInfo * nested, TranslationTableOpcode opcode)
 		case pass_hyphen:
 		  passInstructions[passIC++] = passLine.chars[passLinepos];
 		  passInstructions[passIC++] = passHoldNumber;
+		  passLinepos++;
 		  break;
 		default:
 		  compileError (passNested,
@@ -3164,6 +3178,9 @@ compilePassOpcode (FileInfo * nested, TranslationTableOpcode opcode)
 					passHoldString.length));
 	      return 0;
 	      break;
+	    case pass_hypothesis:
+	      passInstructions[passIC++] = pass_hypothesis;
+	      break;
 	    default:
 	      compileError (passNested, "incorrect operator in action part");
 	      return 0;
@@ -3190,6 +3207,7 @@ compilePassOpcode (FileInfo * nested, TranslationTableOpcode opcode)
 	  start = 1;
 	  break;
 	case pass_eq:
+	case pass_noteq:
 	case pass_lt:
 	case pass_gt:
 	case pass_lteq:
@@ -3203,6 +3221,7 @@ compilePassOpcode (FileInfo * nested, TranslationTableOpcode opcode)
 	case pass_startReplace:
 	case pass_endReplace:
 	case pass_first:
+	case pass_hypothesis:
 	  passIC++;
 	  break;
 	default:
@@ -4580,7 +4599,7 @@ resolveSubtable (const char *table, const char *base, const char *searchPath)
       char *dir;
       int last;
       char *cp;
-      char *searchPath_copy = strdup (searchPath + 1);
+      char *searchPath_copy = strdupWrapper (searchPath + 1);
       for (dir = searchPath_copy; ; dir = cp + 1)
 	{
 	  for (cp = dir; *cp != '\0' && *cp != ','; cp++)
@@ -4656,7 +4675,7 @@ defaultTableResolver (const char *tableList, const char *base)
   
   /* Resolve subtables */
   k = 0;
-  tableList_copy = strdup (tableList);
+  tableList_copy = strdupWrapper (tableList);
   for (subTable = tableList_copy; ; subTable = cp + 1)
     {
       for (cp = subTable; *cp != '\0' && *cp != ','; cp++);
@@ -4772,6 +4791,10 @@ includeFile (FileInfo * nested, CharsString * includedFile)
   return rv;
 }
 
+#ifdef TESTING_TABLES
+#include "compileTranslationTable_testing.ci"
+#endif
+
 /**
  * Compile source tables into a table in memory
  *
@@ -4814,11 +4837,6 @@ compileTranslationTable (const char *tableList)
   
 /* Clean up after compiling files */
 cleanup:
-  free_tablefiles(tableFiles);
-  if (characterClasses)
-    deallocateCharacterClasses ();
-  if (ruleNames)
-    deallocateRuleNames ();
   if (warningCount)
     logMessage (LOG_WARN, "%d warnings issued", warningCount);
   if (!errorCount)
@@ -4826,6 +4844,9 @@ cleanup:
       setDefaults ();
       table->tableSize = tableSize;
       table->bytesUsed = tableUsed;
+#ifdef TESTING_TABLES
+testingTableFile(tableList);
+#endif
     }
   else
     {
@@ -4834,6 +4855,11 @@ cleanup:
 	free (table);
       table = NULL;
     }
+  free_tablefiles(tableFiles);
+  if (characterClasses)
+    deallocateCharacterClasses ();
+  if (ruleNames)
+    deallocateRuleNames ();
   return (void *) table;
 }
 
